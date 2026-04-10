@@ -6,7 +6,7 @@ def extract_features(filepath):
     y, sr = librosa.load(filepath)
     
     # Tempo & Rhythm
-    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, start_bpm=75, tightness=100)
     beat_times = librosa.frames_to_time(beat_frames, sr=sr)
     
     # Dynamics
