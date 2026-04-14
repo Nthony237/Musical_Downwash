@@ -1,6 +1,5 @@
 import numpy as np
 import time
-import pygame
 from types import SimpleNamespace
 from scipy.ndimage import uniform_filter1d
 import sys
@@ -9,7 +8,7 @@ from analysis.beat_analysis import extract_features
 
 # ---- CONFIG ----
 SIM = False
-DRY_RUN = False  # set to False when running on lab machine
+DRY_RUN = False
 Hz = 20
 AUDIO_PATH = 'audio/robots_mixdown.mp3'
 TAKEOFF_HEIGHT = 1.0
@@ -20,7 +19,7 @@ DURATION = 40.0
 # ---- SAFETY BOUNDS ----
 X_MIN, X_MAX = -1.5, 1.5
 Y_MIN, Y_MAX = -1.5, 1.5
-Z_MIN, Z_MAX = 0.5, 2.2
+Z_MIN, Z_MAX = 0.5, 2.0
 
 # ---- BEAT SETTINGS ----
 BEAT_COOLDOWN = 1.6
@@ -99,10 +98,7 @@ def run_choreography(groupState):
     timesteps = np.arange(0, DURATION, 1/Hz)
     land_start = DURATION - 3.0
 
-    # Start music exactly when choreography loop starts
-    print("Starting music and choreography...")
-    pygame.mixer.music.play()
-    music_start = time.time()
+    print("Starting choreography...")
 
     angle = 0.0
     last_beat_time = -BEAT_COOLDOWN
@@ -144,8 +140,6 @@ def run_choreography(groupState):
                 x += sx
                 y += sy
                 z += sz
-                if DRY_RUN:
-                    print(f"t={t:.2f}s | SPIRAL | pos=({x:.3f}, {y:.3f}, {z:.3f})")
 
         # Landing approach
         if t >= land_start:
@@ -164,23 +158,17 @@ def run_choreography(groupState):
             cf.cmdPosition(position)
             timeHelper.sleepForRate(Hz)
 
-    pygame.mixer.music.stop()
     cf.notifySetpointsStop()
     print("Choreography complete.")
 
 def emergency_stop(crazyflies):
     print("\nEMERGENCY STOP")
-    pygame.mixer.music.stop()
     for cf in crazyflies:
         cf.notifySetpointsStop()
         cf.land(targetHeight=0.04, duration=2.0)
 
 def main():
     global SIM, DRY_RUN
-
-    # Initialize pygame audio for all modes
-    pygame.mixer.init()
-    pygame.mixer.music.load(AUDIO_PATH)
 
     if DRY_RUN:
         print("DRY RUN - printing positions only")
@@ -215,19 +203,16 @@ def main():
     timeHelper = swarm.timeHelper
     groupState = SimpleNamespace(crazyflies=crazyflies, timeHelper=timeHelper)
 
-    # Takeoff first — no music yet
     print(f"Taking off to {TAKEOFF_HEIGHT}m...")
     for cf in crazyflies:
         cf.takeoff(targetHeight=TAKEOFF_HEIGHT, duration=TAKEOFF_DURATION)
     timeHelper.sleep(TAKEOFF_DURATION + 1.0)
 
-    # Music and movement start together
     try:
         run_choreography(groupState)
     except KeyboardInterrupt:
         emergency_stop(crazyflies)
 
-    # Land after choreography
     print("Landing...")
     for cf in crazyflies:
         cf.land(targetHeight=0.04, duration=LAND_DURATION)
