@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import pygame
 from types import SimpleNamespace
 from scipy.ndimage import uniform_filter1d
 import sys
@@ -8,7 +9,7 @@ from analysis.beat_analysis import extract_features
 
 # ---- CONFIG ----
 SIM = False
-DRY_RUN = False   # set to False when running on lab machine
+DRY_RUN = False  # set to False when running on lab machine
 Hz = 20
 AUDIO_PATH = 'audio/robots_mixdown.mp3'
 TAKEOFF_HEIGHT = 1.0
@@ -41,7 +42,6 @@ def clamp_position(position):
     return np.array([x, y, z])
 
 def smooth(signal, window=60):
-    """Smooth signal to remove micro-fluctuations."""
     return uniform_filter1d(signal.astype(float), size=window)
 
 def get_value(t, times, values):
@@ -49,34 +49,24 @@ def get_value(t, times, values):
     return values[min(idx, len(values) - 1)]
 
 def get_beat_pulse(t_since_beat, duration=0.8, height=0.15):
-    """Smooth sine arch — rises and falls gracefully."""
     if t_since_beat < 0 or t_since_beat > duration:
         return 0.0
     progress = t_since_beat / duration
     return height * np.sin(progress * np.pi)
 
 def get_spiral_offset(t_since_drop):
-    """
-    Spiral starts tiny, grows outward over first 80%,
-    then fades back to zero so there's no snap when it ends.
-    """
     if t_since_drop < 0 or t_since_drop > SPIRAL_DURATION:
         return 0.0, 0.0, 0.0
-
     progress = t_since_drop / SPIRAL_DURATION
     spiral_angle = progress * 6 * np.pi
-
     z_offset = SPIRAL_HEIGHT * np.sin(progress * np.pi)
-
     if progress < 0.8:
         radius = SPIRAL_RADIUS_START + (SPIRAL_RADIUS_END - SPIRAL_RADIUS_START) * (progress / 0.8)
     else:
         fade = (progress - 0.8) / 0.2
         radius = SPIRAL_RADIUS_END * (1 - fade)
-
     x_offset = radius * np.cos(spiral_angle)
     y_offset = radius * np.sin(spiral_angle)
-
     return x_offset, y_offset, z_offset
 
 def run_choreography(groupState):
@@ -86,18 +76,16 @@ def run_choreography(groupState):
     print("Extracting audio features...")
     features = extract_features(AUDIO_PATH)
 
-    # Smooth signals to remove micro-fluctuations
     rms_smooth = smooth(features['rms'], window=60)
     bass_smooth = smooth(features['bass_energy'], window=60)
     rms_times = features['rms_times']
     freq_times = features['freq_times']
 
-    # Normalize with narrow range for smooth consistent movement
     rms_norm = (rms_smooth - rms_smooth.min()) / (rms_smooth.max() - rms_smooth.min())
-    rms_norm = 0.7 + rms_norm * 0.6        # range: 0.7 to 1.3
+    rms_norm = 0.7 + rms_norm * 0.6
 
     bass_norm = (bass_smooth - bass_smooth.min()) / (bass_smooth.max() - bass_smooth.min())
-    bass_norm = 0.5 + bass_norm * 1.0      # range: 0.5 to 1.5
+    bass_norm = 0.5 + bass_norm * 1.0
 
     beat_times = features['beat_times']
     beat_times = beat_times[beat_times <= DURATION]
@@ -111,7 +99,11 @@ def run_choreography(groupState):
     timesteps = np.arange(0, DURATION, 1/Hz)
     land_start = DURATION - 3.0
 
-    print("Starting choreography...")
+    # Start music exactly when choreography loop starts
+    print("Starting music and choreography...")
+    pygame.mixer.music.play()
+    music_start = time.time()
+
     angle = 0.0
     last_beat_time = -BEAT_COOLDOWN
     last_spiral_time = -SPIRAL_COOLDOWN
@@ -121,14 +113,13 @@ def run_choreography(groupState):
         speed = get_value(t, rms_times, rms_norm)
         size = get_value(t, freq_times, bass_norm)
 
-        # Slow graceful figure-8
         angle += speed * (2 * np.pi / Hz) * 0.032
 
         x = size * np.sin(angle)
         y = size * np.sin(angle) * np.cos(angle)
         z = TAKEOFF_HEIGHT
 
-        # Beat pulse — smooth sine arch
+        # Beat pulse
         for bt in beat_times:
             time_since_beat = t - bt
             if 0 <= time_since_beat <= BEAT_PULSE_DURATION:
@@ -156,7 +147,7 @@ def run_choreography(groupState):
                 if DRY_RUN:
                     print(f"t={t:.2f}s | SPIRAL | pos=({x:.3f}, {y:.3f}, {z:.3f})")
 
-        # Landing approach — drift to center and descend over last 3 seconds
+        # Landing approach
         if t >= land_start:
             land_progress = (t - land_start) / 3.0
             x = x * (1 - land_progress)
@@ -173,17 +164,23 @@ def run_choreography(groupState):
             cf.cmdPosition(position)
             timeHelper.sleepForRate(Hz)
 
+    pygame.mixer.music.stop()
     cf.notifySetpointsStop()
     print("Choreography complete.")
 
 def emergency_stop(crazyflies):
     print("\nEMERGENCY STOP")
+    pygame.mixer.music.stop()
     for cf in crazyflies:
         cf.notifySetpointsStop()
         cf.land(targetHeight=0.04, duration=2.0)
 
 def main():
     global SIM, DRY_RUN
+
+    # Initialize pygame audio for all modes
+    pygame.mixer.init()
+    pygame.mixer.music.load(AUDIO_PATH)
 
     if DRY_RUN:
         print("DRY RUN - printing positions only")
@@ -218,16 +215,19 @@ def main():
     timeHelper = swarm.timeHelper
     groupState = SimpleNamespace(crazyflies=crazyflies, timeHelper=timeHelper)
 
+    # Takeoff first — no music yet
     print(f"Taking off to {TAKEOFF_HEIGHT}m...")
     for cf in crazyflies:
         cf.takeoff(targetHeight=TAKEOFF_HEIGHT, duration=TAKEOFF_DURATION)
     timeHelper.sleep(TAKEOFF_DURATION + 1.0)
 
+    # Music and movement start together
     try:
         run_choreography(groupState)
     except KeyboardInterrupt:
         emergency_stop(crazyflies)
 
+    # Land after choreography
     print("Landing...")
     for cf in crazyflies:
         cf.land(targetHeight=0.04, duration=LAND_DURATION)
