@@ -5,12 +5,14 @@ from scipy.ndimage import uniform_filter1d
 import sys
 sys.path.append('..')
 from analysis.beat_analysis import extract_features
+import os
 
 # ---- CONFIG ----
 SIM = False
 DRY_RUN = False
 Hz = 20
-AUDIO_PATH = 'audio/robots_mixdown.mp3'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+AUDIO_PATH = os.path.join(BASE_DIR, 'audio', 'robots_mixdown.mp3') 
 TAKEOFF_HEIGHT = 1.0
 TAKEOFF_DURATION = 3.0
 LAND_DURATION = 2.5

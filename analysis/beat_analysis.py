@@ -1,5 +1,6 @@
 import librosa
 import numpy as np
+import os
 
 def extract_features(filepath):
     """Extract key features for choreography mapping."""
@@ -47,8 +48,9 @@ def extract_features(filepath):
     }
 
 if __name__ == "__main__":
-    filepath = '../audio/robots_mixdown.mp3'
-    features = extract_features(filepath)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    filepath = os.path.join(BASE_DIR, '..', 'audio', 'robots_mixdown.mp3')
+    features = extract_features(filepath) 
     print(f"Tempo: {features['tempo']} BPM")
     print(f"Duration: {features['duration']:.1f}s")
     print(f"Beats: {len(features['beat_times'])}")
