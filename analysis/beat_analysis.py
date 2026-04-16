@@ -21,6 +21,7 @@ def extract_features(filepath):
     bass_energy = np.mean(mel_db[:20, :], axis=0)
     treble_energy = np.mean(mel_db[80:, :], axis=0)
     freq_times = librosa.frames_to_time(np.arange(len(bass_energy)), sr=sr)
+    onset_strength_raw = librosa.onset.onset_strength(y=y, sr=sr) 
 
     # Structure (3 equal parts)
     duration = librosa.get_duration(y=y, sr=sr)
@@ -44,7 +45,8 @@ def extract_features(filepath):
         'section_times': section_times,
         'duration': duration,
         'sr': sr,
-        'drop_times': drop_times
+        'drop_times': drop_times,
+        'onset_strength': onset_strength_raw,
     }
 
 if __name__ == "__main__":
