@@ -268,7 +268,7 @@ def run_drone1(cf, timeHelper, features, interact_time):
         position = np.array([x, y, z]) + np.array(initPos)
         position = clamp_position(position, z_min, z_max)
         cf.cmdPosition(position)
-        timeHelper.sleepForRate(Hz)
+        time.sleep(1/Hz)
 
     cf.notifySetpointsStop()
 
@@ -366,7 +366,7 @@ def run_drone2(cf, timeHelper, features, interact_time):
         position = np.array([x, y, z]) + np.array(initPos)
         position = clamp_position(position, z_min, z_max)
         cf.cmdPosition(position)
-        timeHelper.sleepForRate(Hz)
+        time.sleep(1/Hz)
 
     cf.notifySetpointsStop()
 
@@ -385,7 +385,7 @@ def main():
             position=lambda: [0, 0, 0],
             cmdPosition=lambda p: None,
             notifySetpointsStop=lambda: None,
-            takeoff=lambda **k: None,
+            takeoff=lambda **k: None, 
             land=lambda **k: None
         )
         cf2 = SimpleNamespace(
@@ -470,7 +470,7 @@ def main():
     def drone2_thread():
         # Wait until DRONE2_TAKEOFF_DELAY seconds into the performance
         print(f"Drone 2 waiting until t={DRONE2_TAKEOFF_DELAY}s to take off...")
-        timeHelper.sleep(DRONE2_TAKEOFF_DELAY)
+        time.sleep(DRONE2_TAKEOFF_DELAY)
 
         if cf2 is None:
             print("No drone 2 available, skipping.")
@@ -479,7 +479,7 @@ def main():
         # Drone 1 is in upper zone by now so safe to take off low
         print(f"Drone 2 taking off to {DRONE2_TAKEOFF_HEIGHT}m...")
         cf2.takeoff(targetHeight=DRONE2_TAKEOFF_HEIGHT, duration=DRONE2_TAKEOFF_DURATION)
-        timeHelper.sleep(DRONE2_TAKEOFF_DURATION + 1.5)  # extra stabilization time
+        time.sleep(DRONE2_TAKEOFF_DURATION + 1.5)  # extra stabilization time
 
         print("Drone 2 starting choreography...")
         try:
