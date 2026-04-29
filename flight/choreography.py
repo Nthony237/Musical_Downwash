@@ -486,7 +486,7 @@ def get_drone2_positions(cf, features):
     cf.notifySetpointsStop()
     print("Drone 2 choreography complete.")
 
-def get_drone3_positions(cf, features):
+def get_drone3(cf, features):
     rms_times  = features['rms_times']
     rms        = features['rms']
     bass       = features['bass_energy']
