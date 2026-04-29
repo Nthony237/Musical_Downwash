@@ -26,9 +26,9 @@ Y_MIN, Y_MAX = -1.5, 1.5
 Z_MIN, Z_MAX = 0.5, 2.5
 
 # ---- FIXED START POSITIONS ----
-D1_START = np.array([0.0,   0.5,  0.0])
-D2_START = np.array([-0.5, -0.5,  0.0])
-D3_START = np.array([0.5,  -0.5,  0.0])
+D1_START = np.array([0.0,   1,  0.0])
+D2_START = np.array([-1, -1,  0.0])
+D3_START = np.array([1,  -1,  0.0])
 
 # ---- HEIGHT ZONES ----
 D1_Z_MIN, D1_Z_MAX = 0.5, 2.5
