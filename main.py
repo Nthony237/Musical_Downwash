@@ -10,7 +10,7 @@ from analysis.beat_analysis import extract_features
 
 # ---- CONFIG ----
 SIM = False
-DRY_RUN = True
+DRY_RUN = False
 Hz = 20
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 AUDIO_PATH = os.path.join(BASE_DIR, 'audio', 'robots_mixdown.mp3')
