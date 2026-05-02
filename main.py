@@ -19,6 +19,11 @@ LAND_DURATION = 2.5
 SONG_END = 166.6
 SPEED_SCALE = 0.85
 
+# ---- LED COLOR — set once at takeoff, never changed during flight ----
+LED_R = 255
+LED_G = 255
+LED_B = 255   # white
+
 # ---- SAFETY BOUNDS ----
 X_MIN, X_MAX = -1.5, 1.5
 Y_MIN, Y_MAX = -1.5, 1.5
@@ -30,7 +35,6 @@ D2_START = np.array([-1.0, -1.0,  0.0])
 D3_START = np.array([1.0,  -1.0,  0.0])
 
 # ---- FABRIC STRUCTURE ----
-# +X toward screen, +Y to the left, fabric flat at top of frame ~0.46m
 FABRIC_CENTER_X = 0.0
 FABRIC_CENTER_Y = 0.0
 FABRIC_X_HALF   = 0.5
@@ -81,7 +85,6 @@ UPDOWN_END         = 131.0
 FINAL_CIRCLE_START = 131.0
 
 # ---- BROKEN HEART ----
-# Laufey sings "let you break my heart again" at ~143s
 HEART_START = 143.0
 HEART_BREAK = 158.0
 HEART_END   = SONG_END
@@ -94,68 +97,30 @@ DRONE3_TAKEOFF_DELAY    = 106.0
 DRONE3_TAKEOFF_HEIGHT   = 0.8
 DRONE3_TAKEOFF_DURATION = 3.0
 
-# ---- RGB ----
-S1_BASE_COLOR = (255, 200,  80)
-S1_BEAT_COLOR = ( 80, 150, 255)
-S2_BASE_COLOR = (200,  40, 255)
-S2_BEAT_COLOR = (255, 255, 255)
-S3_BASE_COLOR = (  0, 220, 180)
-S3_BEAT_COLOR = (255, 100,   0)
-HEART_COLOR   = (255,  50,  80)
-
 
 # =========================================================
 # HELPERS
 # =========================================================
 
-def lerp_color(c1, c2, t):
-    t = np.clip(t, 0.0, 1.0)
-    return (int(c1[0]+(c2[0]-c1[0])*t),
-            int(c1[1]+(c2[1]-c1[1])*t),
-            int(c1[2]+(c2[2]-c1[2])*t))
-
-
-def get_color(t, beat_times):
-    if t >= HEART_START:
-        fade = min((t - HEART_START) / 2.0, 1.0)
-        return lerp_color(S3_BASE_COLOR, HEART_COLOR, fade)
-    if t <= S1_END:
-        base, beat_col = S1_BASE_COLOR, S1_BEAT_COLOR
-    elif t <= S2_END:
-        base, beat_col = S2_BASE_COLOR, S2_BEAT_COLOR
-    else:
-        base, beat_col = S3_BASE_COLOR, S3_BEAT_COLOR
-    past = beat_times[beat_times <= t]
-    if len(past) == 0:
-        return base
-    tsb = t - past[-1]
-    if tsb <= 0.4:
-        return lerp_color(beat_col, base, tsb / 0.4)
-    return base
-
-
-def send_color(cf, r, g, b):
+def set_led(cf):
+    """Set LED ring to fixed color once. Called after takeoff only."""
     try:
         cf.setParam('ring.effect',     7)
-        cf.setParam('ring.solidRed',   r)
-        cf.setParam('ring.solidGreen', g)
-        cf.setParam('ring.solidBlue',  b)
+        cf.setParam('ring.solidRed',   LED_R)
+        cf.setParam('ring.solidGreen', LED_G)
+        cf.setParam('ring.solidBlue',  LED_B)
     except Exception:
         pass
 
 
 def heart_point(param):
-    """
-    Parametric heart scaled for lab space.
-    +X toward screen, +Y left. Heart faces upward from above.
-    """
     hx = 16 * np.sin(param) ** 3
     hy = (13*np.cos(param) - 5*np.cos(2*param)
           - 2*np.cos(3*param) - np.cos(4*param))
     hx /= 16.0
     hy /= 13.0
-    lab_x = hy * 0.5    # heart vertical → lab X
-    lab_y = hx * 0.6    # heart horizontal → lab Y
+    lab_x = hy * 0.5
+    lab_y = hx * 0.6
     return lab_x, lab_y
 
 
@@ -231,11 +196,6 @@ def updown_alt(t, drone_id, amplitude=0.35):
 
 
 def fabric_sweep(t, drone_id, sweep_speed=0.10):
-    """
-    Sweeping arc over fabric, ±0.9m X, ±1.3m Y.
-    Dips to DOWNWASH_HEIGHT over center, rises to DOWNWASH_HIGH at edges.
-    Staggered phases per drone so they take turns passing over fabric.
-    """
     phases = {1: 0.0, 2: 2*np.pi/3, 3: 4*np.pi/3}
     phase = phases[drone_id]
     x_offset = 0.9 * np.sin(sweep_speed * SPEED_SCALE * t + phase)
@@ -276,7 +236,7 @@ def emergency_stop(crazyflies):
 
 
 # =========================================================
-# DRONE 1 — traces LEFT half of broken heart at end
+# DRONE 1
 # =========================================================
 
 def run_drone1(cf, features):
@@ -452,8 +412,6 @@ def run_drone1(cf, features):
         position = np.array([x, y, z]) + np.array(initPos)
         position = clamp_position(position, z_min, z_max)
         cf.cmdPosition(position)
-        r, g, b = get_color(t, beat_times)
-        send_color(cf, r, g, b)
         time.sleep(1/Hz)
 
     cf.notifySetpointsStop()
@@ -461,7 +419,7 @@ def run_drone1(cf, features):
 
 
 # =========================================================
-# DRONE 2 — traces RIGHT half of broken heart at end
+# DRONE 2
 # =========================================================
 
 def run_drone2(cf, features):
@@ -598,8 +556,6 @@ def run_drone2(cf, features):
         position = np.array([x, y, z]) + np.array(initPos)
         position = clamp_position(position, z_min, z_max)
         cf.cmdPosition(position)
-        r, g, b = get_color(t, beat_times_full)
-        send_color(cf, r, g, b)
         time.sleep(1/Hz)
 
     cf.notifySetpointsStop()
@@ -607,7 +563,7 @@ def run_drone2(cf, features):
 
 
 # =========================================================
-# DRONE 3 — slow rise above heart center at end
+# DRONE 3
 # =========================================================
 
 def run_drone3(cf, features):
@@ -692,8 +648,6 @@ def run_drone3(cf, features):
         position = np.array([x, y, z]) + np.array(initPos)
         position = clamp_position(position, z_min, z_max)
         cf.cmdPosition(position)
-        r, g, b = get_color(t, beat_times_full)
-        send_color(cf, r, g, b)
         time.sleep(1/Hz)
 
     cf.notifySetpointsStop()
@@ -718,7 +672,7 @@ def main():
         print(f"  t={S1_END}s    D2 choreography")
         print(f"  t={DRONE3_TAKEOFF_DELAY}s   D3 takeoff")
         print(f"  t={S2_END}s   D3 choreography")
-        print(f"  t={HEART_START}s  Broken heart (D1+D2 trace halves, D3 rises)")
+        print(f"  t={HEART_START}s  Broken heart begins")
         print(f"  t={HEART_BREAK}s  Heart breaks apart")
         print(f"  t={SONG_END}s All land")
         return
@@ -744,9 +698,11 @@ def main():
     features = extract_features(AUDIO_PATH)
     print(f"Ready. Duration: {features['duration']:.1f}s")
 
+    # Takeoff drone 1 and set LED once
     print("Drone 1 taking off...")
     cf1.takeoff(targetHeight=TAKEOFF_HEIGHT, duration=TAKEOFF_DURATION)
     time.sleep(TAKEOFF_DURATION + 1.0)
+    set_led(cf1)
 
     perf_start = time.time()
 
@@ -765,6 +721,7 @@ def main():
         cf2.takeoff(targetHeight=DRONE2_TAKEOFF_HEIGHT,
                     duration=DRONE2_TAKEOFF_DURATION)
         time.sleep(DRONE2_TAKEOFF_DURATION + 1.5)
+        set_led(cf2)   # set LED once after takeoff
         elapsed = time.time() - perf_start
         remaining = S1_END - elapsed
         if remaining > 0: time.sleep(remaining)
@@ -783,6 +740,7 @@ def main():
         cf3.takeoff(targetHeight=DRONE3_TAKEOFF_HEIGHT,
                     duration=DRONE3_TAKEOFF_DURATION)
         time.sleep(DRONE3_TAKEOFF_DURATION + 1.5)
+        set_led(cf3)   # set LED once after takeoff
         elapsed = time.time() - perf_start
         remaining = S2_END - elapsed
         if remaining > 0: time.sleep(remaining)

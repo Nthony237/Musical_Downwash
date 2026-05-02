@@ -67,9 +67,9 @@ UPDOWN_END         = 131.0
 FINAL_CIRCLE_START = 131.0
 FINAL_CIRCLE_END   = SONG_END
 
-# ---- BROKEN HEART TIMESTAMPS ----
-HEART_START = 155.0
-HEART_BREAK = 163.0
+# ---- BROKEN HEART ----
+HEART_START = 143.0
+HEART_BREAK = 158.0
 HEART_END   = SONG_END
 
 # ---- RGB ----
@@ -118,30 +118,20 @@ def get_color(t, beat_times):
 
 def heart_point(param):
     """
-    Parametric heart. Returns lab (x, y) scaled to fit space.
-    Lab: X = toward screen, Y = left.
-    Heart is drawn in the XY plane — X is vertical axis of heart,
-    Y is horizontal axis so it faces the camera looking from above.
+    Parametric heart scaled for lab space.
+    +X toward screen, +Y left. Heart faces upward when viewed from above.
     """
     hx = 16 * np.sin(param) ** 3
     hy = (13*np.cos(param) - 5*np.cos(2*param)
           - 2*np.cos(3*param) - np.cos(4*param))
-    # Normalize
-    hx = hx / 16.0
-    hy = hy / 13.0
-    # Scale to fit — 0.7m wide (Y), 0.6m tall (X)
-    lab_x = hy * 0.5   # heart vertical → lab X (toward screen)
-    lab_y = hx * 0.6   # heart horizontal → lab Y (left/right)
+    hx /= 16.0
+    hy /= 13.0
+    lab_x = hy * 0.5
+    lab_y = hx * 0.6
     return lab_x, lab_y
 
 
 def get_heart_half(t, side, start_time, duration=8.0, break_offset=0.0):
-    """
-    Returns (x, y) along one half of broken heart at time t.
-    side: 'left' = drone 1 (negative Y half)
-          'right' = drone 2 (positive Y half)
-    break_offset: Y drift after heart breaks
-    """
     progress = np.clip((t - start_time) / duration, 0.0, 1.0)
     if side == 'left':
         param = np.pi + progress * np.pi
@@ -217,18 +207,14 @@ def updown_alt(t, drone_id, amplitude=0.35):
 
 def fabric_sweep(t, drone_id, sweep_speed=0.10):
     """
-    Sweeping arc over fabric. Drone descends to DOWNWASH_HEIGHT
-    when crossing fabric center, rises to DOWNWASH_HIGH at far end.
-    Each drone has a different phase so they take turns.
-    Increased amplitude: ±0.9m X, ±1.3m Y.
+    Sweeping arc over fabric, ±0.9m X, ±1.3m Y.
+    Dips to DOWNWASH_HEIGHT over center, rises to DOWNWASH_HIGH at edges.
+    Staggered phases per drone.
     """
     phases = {1: 0.0, 2: 2*np.pi/3, 3: 4*np.pi/3}
     phase = phases[drone_id]
-    # X sweep ±0.9m (increased from 0.5)
     x_offset = 0.9 * np.sin(sweep_speed * SPEED_SCALE * t + phase)
-    # Y sweep ±1.3m (increased from 1.0)
     y_offset = 1.3 * np.sin(sweep_speed * SPEED_SCALE * t + phase + np.pi/4)
-    # Height dips at center, rises at edges
     cycle = (np.sin(sweep_speed * SPEED_SCALE * t + phase) + 1) / 2
     z_height = DOWNWASH_HEIGHT + (DOWNWASH_HIGH - DOWNWASH_HEIGHT) * cycle
     return x_offset, y_offset, z_height
@@ -339,99 +325,85 @@ def get_drone1_positions(features, duration=SONG_END, fps=30):
         th    = get_value(t, freq_times, treb_norm)
         vocal = get_value(t, rms_times, rms_long_norm)
 
-        x = D1_START[0]
-        y = D1_START[1]
+        x = D1_START[0]; y = D1_START[1]
         z = TAKEOFF_HEIGHT + th
         z_min, z_max = D1_Z_MIN, D1_Z_MAX
 
         # ===== BROKEN HEART =====
         if t >= HEART_START:
-            heart_fade = smooth_fade(t, HEART_START, duration=1.5)
+            hf = smooth_fade(t, HEART_START, duration=1.5)
             if t < HEART_BREAK:
                 hx, hy = get_heart_half(t, 'left',
                                         start_time=HEART_START,
                                         duration=HEART_BREAK-HEART_START)
-                x = blend(prev_x, FABRIC_CENTER_X+hx, heart_fade)
-                y = blend(prev_y, FABRIC_CENTER_Y+hy, heart_fade)
-                z = 1.2
-                z_min, z_max = 1.0, 1.5
+                x = blend(prev_x, FABRIC_CENTER_X+hx, hf)
+                y = blend(prev_y, FABRIC_CENTER_Y+hy, hf)
             else:
                 bp = min((t-HEART_BREAK)/3.0, 1.0)
                 hx, hy = get_heart_half(t, 'left',
                                         start_time=HEART_START,
                                         duration=HEART_BREAK-HEART_START,
                                         break_offset=bp*0.35)
-                x = FABRIC_CENTER_X + hx
-                y = FABRIC_CENTER_Y + hy
-                z = 1.2
-                z_min, z_max = 1.0, 1.5
+                x = FABRIC_CENTER_X+hx; y = FABRIC_CENTER_Y+hy
+            z = 1.2; z_min, z_max = 1.0, 1.5
 
         # ===== SECTION 1 =====
         elif t <= S1_END:
             if t < CIRCLE1_START:
                 sx, sy, sz = fabric_sweep(t, drone_id=1, sweep_speed=0.10)
-                x = FABRIC_CENTER_X + sx
-                y = FABRIC_CENTER_Y + sy
-                hop = BEAT_PULSE_HEIGHT * (0.4 + vocal * 0.6)
-                z, last_beat = apply_beat_pulse(t, beat_times, last_beat,
-                                                sz, hop, fps)
+                x = FABRIC_CENTER_X+sx; y = FABRIC_CENTER_Y+sy
+                hop = BEAT_PULSE_HEIGHT*(0.4+vocal*0.6)
+                z, last_beat = apply_beat_pulse(t, beat_times, last_beat, sz, hop, fps)
             elif t <= CIRCLE1_END:
-                c1_angle += speed * SPEED_SCALE * 0.07
-                cx, cy = rotated_circle(c1_angle, 0.6 + vocal*0.5)
-                x = D1_START[0] + cx
-                y = D1_START[1] + cy
+                c1_angle += speed*SPEED_SCALE*0.07
+                cx, cy = rotated_circle(c1_angle, 0.6+vocal*0.5)
+                x = D1_START[0]+cx; y = D1_START[1]+cy
                 z, last_beat = apply_beat_pulse(t, beat_times, last_beat,
                                                 z, BEAT_PULSE_HEIGHT*0.5, fps)
             elif t < CIRCLE2_START:
                 sx, sy, sz = fabric_sweep(t, drone_id=1, sweep_speed=0.09)
-                x = FABRIC_CENTER_X + sx
-                y = FABRIC_CENTER_Y + sy
+                x = FABRIC_CENTER_X+sx; y = FABRIC_CENTER_Y+sy
                 z, last_beat = apply_beat_pulse(t, beat_times, last_beat,
                                                 sz, BEAT_PULSE_HEIGHT, fps)
                 if ENABLE_SPIRAL:
                     for dt in drop_times:
                         if abs(t-dt) < (1/fps):
                             if (dt-last_spiral) >= SPIRAL_COOLDOWN:
-                                spiral_start = t
-                                last_spiral  = t
+                                spiral_start = t; last_spiral = t
                             break
-                    tss = t - spiral_start
+                    tss = t-spiral_start
                     if 0 <= tss <= SPIRAL_DURATION:
                         spx, spy, spz = get_spiral_offset(tss)
                         x += spx; y += spy; z += spz
             elif t <= CIRCLE2_END:
-                c2_angle += speed * SPEED_SCALE * 0.06
+                c2_angle += speed*SPEED_SCALE*0.06
                 cx, cy = rotated_circle(c2_angle, 0.5+vocal*0.4)
-                x = D1_START[0] + cx
-                y = D1_START[1] + cy
-                z = 0.85 + th
+                x = D1_START[0]+cx; y = D1_START[1]+cy
+                z = 0.85+th
                 z, last_beat = apply_beat_pulse(t, beat_times, last_beat,
                                                 z, BEAT_PULSE_HEIGHT*0.6, fps)
             elif t <= TORNADO_END:
                 tx, ty, tz = tornado_move(t, TORNADO_START,
                                           duration=TORNADO_END-TORNADO_START)
                 fade = smooth_fade(t, TORNADO_START, duration=1.0)
-                x = D1_START[0] + tx*fade
-                y = D1_START[1] + ty*fade
-                z = FABRIC_HEIGHT + tz
+                x = D1_START[0]+tx*fade; y = D1_START[1]+ty*fade
+                z = FABRIC_HEIGHT+tz
             else:
                 sx, sy, sz = fabric_sweep(t, drone_id=1, sweep_speed=0.08)
-                x = FABRIC_CENTER_X + sx*0.5
-                y = FABRIC_CENTER_Y + sy*0.5
-                z = sz
+                x = FABRIC_CENTER_X+sx*0.5; y = FABRIC_CENTER_Y+sy*0.5; z = sz
 
         # ===== SECTION 2 =====
         elif t <= S2_END:
             z_min, z_max = 1.5, 2.5
             if t < BOTH_CIRCLE_START:
-                s2_angle += speed * SPEED_SCALE * 0.045
-                x = D1_START[0] + 1.1*np.sin(s2_angle)
-                y = D1_START[1] + 1.0*np.sin(2*s2_angle+np.pi/4)
-                z = 1.8 + th
+                s2_angle += speed*SPEED_SCALE*0.045
+                x = D1_START[0]+1.1*np.sin(s2_angle)
+                y = D1_START[1]+1.0*np.sin(2*s2_angle+np.pi/4)
+                z = 1.8+th
                 z, last_beat = apply_beat_pulse(t, beat_times, last_beat,
                                                 z, BEAT_PULSE_HEIGHT, fps)
             elif t <= BOTH_CIRCLE_END:
-                orb_angle += 1.1 * SPEED_SCALE * (1/fps)
+                orb_angle += 1.1*SPEED_SCALE*(1/fps)
                 fade = smooth_fade(t, BOTH_CIRCLE_START, duration=2.0)
                 cx, cy = rotated_circle(orb_angle, 1.0)
                 x = cx*fade; y = cy*fade; z = 1.8+th
@@ -441,13 +413,12 @@ def get_drone1_positions(features, duration=SONG_END, fps=30):
                 fade = smooth_fade(t, SWAY_START, duration=1.5)
                 beat_idx = int(np.searchsorted(beat_times, t)) % 4
                 sway_dir = 1.0 if beat_idx < 2 else -1.0
-                x = sway_dir * 1.0 * vocal * fade
-                y = D1_START[1] * (1-fade*0.5)
-                z = 1.8 + th
+                x = sway_dir*1.0*vocal*fade
+                y = D1_START[1]*(1-fade*0.5); z = 1.8+th
                 z, last_beat = apply_beat_pulse(t, beat_times, last_beat,
                                                 z, BEAT_PULSE_HEIGHT*1.1, fps)
             else:
-                orb_angle += 0.7 * SPEED_SCALE * (1/fps)
+                orb_angle += 0.7*SPEED_SCALE*(1/fps)
                 cx, cy = rotated_circle(orb_angle, 1.0)
                 x = cx; y = cy*0.8; z = 1.8+th
                 z, last_beat = apply_beat_pulse(t, beat_times, last_beat,
@@ -459,10 +430,9 @@ def get_drone1_positions(features, duration=SONG_END, fps=30):
             fade = smooth_fade(t, S2_END, duration=BLEND_DURATION)
             if t <= UPDOWN_END:
                 orbit_s3 = 2*np.pi/8.0
-                ox = FABRIC_X_HALF * np.sin(orbit_s3*(t-S2_END))
-                oy = FABRIC_Y_HALF * np.cos(orbit_s3*(t-S2_END))
-                x = FABRIC_CENTER_X + ox*fade
-                y = FABRIC_CENTER_Y + oy*fade
+                ox = FABRIC_X_HALF*np.sin(orbit_s3*(t-S2_END))
+                oy = FABRIC_Y_HALF*np.cos(orbit_s3*(t-S2_END))
+                x = FABRIC_CENTER_X+ox*fade; y = FABRIC_CENTER_Y+oy*fade
                 z = 1.8+th+updown_alt(t, drone_id=1, amplitude=0.35)*fade
             else:
                 fin_angle += 2*np.pi/9.0*(1/fps)
@@ -538,20 +508,19 @@ def get_drone2_positions(features, duration=SONG_END, fps=30,
         vocal = get_value(t, rms_times, rms_long_norm)
 
         x = D2_START[0]; y = D2_START[1]
-        z = 0.9 + th
+        z = 0.9+th
         z_min, z_max = D2_Z_MIN, D2_Z_MAX
         fade_in = smooth_fade(t, start_time, duration=BLEND_DURATION)
 
         # ===== BROKEN HEART =====
         if t >= HEART_START:
-            heart_fade = smooth_fade(t, HEART_START, duration=1.5)
+            hf = smooth_fade(t, HEART_START, duration=1.5)
             if t < HEART_BREAK:
                 hx, hy = get_heart_half(t, 'right',
                                         start_time=HEART_START,
                                         duration=HEART_BREAK-HEART_START)
-                x = blend(prev_x, FABRIC_CENTER_X+hx, heart_fade)
-                y = blend(prev_y, FABRIC_CENTER_Y+hy, heart_fade)
-                z = 1.2; z_min, z_max = 1.0, 1.5
+                x = blend(prev_x, FABRIC_CENTER_X+hx, hf)
+                y = blend(prev_y, FABRIC_CENTER_Y+hy, hf)
             else:
                 bp = min((t-HEART_BREAK)/3.0, 1.0)
                 hx, hy = get_heart_half(t, 'right',
@@ -559,12 +528,12 @@ def get_drone2_positions(features, duration=SONG_END, fps=30,
                                         duration=HEART_BREAK-HEART_START,
                                         break_offset=bp*0.35)
                 x = FABRIC_CENTER_X+hx; y = FABRIC_CENTER_Y+hy
-                z = 1.2; z_min, z_max = 1.0, 1.5
+            z = 1.2; z_min, z_max = 1.0, 1.5
 
         # ===== SECTION 2 =====
         elif t <= S2_END:
             if t < BOTH_CIRCLE_START:
-                ts = t - ARC_START
+                ts = t-ARC_START
                 bx = 0.7*np.sin(1.8*SPEED_SCALE*ts)
                 by = 1.1*np.cos(1.8*SPEED_SCALE*ts)
                 x = D2_START[0]+bx*fade_in; y = D2_START[1]+by*fade_in
@@ -586,19 +555,17 @@ def get_drone2_positions(features, duration=SONG_END, fps=30,
                 z, last_beat = apply_beat_pulse(t, beat_times, last_beat,
                                                 z, BEAT_PULSE_HEIGHT*0.9, fps)
             else:
-                helix_dur = D2_HELIX_END - D2_HELIX_START
-                descent_start = D2_HELIX_END - 5.0
+                helix_dur = D2_HELIX_END-D2_HELIX_START
+                descent_start = D2_HELIX_END-5.0
                 if t < descent_start:
                     hx, hy, hz = helix_move(t, D2_HELIX_START,
-                                            duration=helix_dur,
-                                            max_r=1.0, max_h=1.1)
+                                            duration=helix_dur, max_r=1.0, max_h=1.1)
                     x = D2_START[0]+hx; y = D2_START[1]+hy
                     z = 0.8+hz+th; z_min, z_max = D2_Z_MIN, 2.2
                 else:
                     dp = (t-descent_start)/5.0
                     hx, hy, hz = helix_move(descent_start, D2_HELIX_START,
-                                            duration=helix_dur,
-                                            max_r=1.0, max_h=1.1)
+                                            duration=helix_dur, max_r=1.0, max_h=1.1)
                     x = blend(D2_START[0]+hx, D2_START[0], dp)
                     y = blend(D2_START[1]+hy, D2_START[1], dp)
                     z = blend(0.8+hz+th, 0.8, dp)
@@ -682,7 +649,7 @@ def get_drone3_positions(features, duration=SONG_END, fps=30,
         fade_in = smooth_fade(t, start_time+1.0, duration=BLEND_DURATION)
 
         x = D3_START[0]; y = D3_START[1]
-        z = 0.8 + th
+        z = 0.8+th
         z_min, z_max = D3_Z_MIN, D3_Z_MAX
 
         # ===== BROKEN HEART — slow rise above center =====
@@ -720,7 +687,7 @@ def get_drone3_positions(features, duration=SONG_END, fps=30,
                         if (dt-last_spiral) >= SPIRAL_COOLDOWN:
                             spiral_start = t; last_spiral = t
                         break
-                tss = t - spiral_start
+                tss = t-spiral_start
                 if 0 <= tss <= SPIRAL_DURATION:
                     spx, spy, spz = get_spiral_offset(tss)
                     x += spx*0.3*fade_in; y += spy*0.3*fade_in; z += spz*0.3
