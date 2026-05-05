@@ -20,9 +20,10 @@ SONG_END = 166.6
 SPEED_SCALE = 0.85
 
 # ---- LED COLOR — set once at takeoff, never changed during flight ----
-LED_R = 255
-LED_G = 255
-LED_B = 255   # white
+# ---- LED COLORS — Powerpuff Girls, one per drone ----
+D1_LED = (255,  20,  80)   
+D2_LED = ( 20, 120, 255)   
+D3_LED = (  0, 200,  50)   
 
 # ---- SAFETY BOUNDS ----
 X_MIN, X_MAX = -1.5, 1.5
@@ -102,13 +103,12 @@ DRONE3_TAKEOFF_DURATION = 3.0
 # HELPERS
 # =========================================================
 
-def set_led(cf):
-    """Set LED ring to fixed color once. Called after takeoff only."""
+def set_led(cf, color):
     try:
         cf.setParam('ring.effect',     7)
-        cf.setParam('ring.solidRed',   LED_R)
-        cf.setParam('ring.solidGreen', LED_G)
-        cf.setParam('ring.solidBlue',  LED_B)
+        cf.setParam('ring.solidRed',   color[0])
+        cf.setParam('ring.solidGreen', color[1])
+        cf.setParam('ring.solidBlue',  color[2])
     except Exception:
         pass
 
@@ -702,7 +702,7 @@ def main():
     print("Drone 1 taking off...")
     cf1.takeoff(targetHeight=TAKEOFF_HEIGHT, duration=TAKEOFF_DURATION)
     time.sleep(TAKEOFF_DURATION + 1.0)
-    set_led(cf1)
+    set_led(cf1, D1_LED)
 
     perf_start = time.time()
 
@@ -721,7 +721,7 @@ def main():
         cf2.takeoff(targetHeight=DRONE2_TAKEOFF_HEIGHT,
                     duration=DRONE2_TAKEOFF_DURATION)
         time.sleep(DRONE2_TAKEOFF_DURATION + 1.5)
-        set_led(cf2)   # set LED once after takeoff
+        set_led(cf2, D2_LED)   # set LED once after takeoff
         elapsed = time.time() - perf_start
         remaining = S1_END - elapsed
         if remaining > 0: time.sleep(remaining)
@@ -740,7 +740,7 @@ def main():
         cf3.takeoff(targetHeight=DRONE3_TAKEOFF_HEIGHT,
                     duration=DRONE3_TAKEOFF_DURATION)
         time.sleep(DRONE3_TAKEOFF_DURATION + 1.5)
-        set_led(cf3)   # set LED once after takeoff
+        set_led(cf3, D3_LED)   # set LED once after takeoff
         elapsed = time.time() - perf_start
         remaining = S2_END - elapsed
         if remaining > 0: time.sleep(remaining)
